@@ -1,0 +1,79 @@
+pipeline {
+    agent any
+    
+    tools {
+        jdk 'jdk 17'
+        maven 'maven'
+    }
+    
+    environment {
+        SCANNER_HOME = tool 'sonar-scanner'
+    }
+    
+    stages {
+        stage('Git-checkout') {
+            steps {
+               git branch: 'main', url: 'https://github.com/CharanSai8127/Shopping-Cart.git'
+            }
+        }
+        
+        stage('Compile') {
+            steps {
+                sh 'mvn compile'
+            }
+        }
+        
+        stage('OWASP') {
+            steps {
+                dependencyCheck additionalArguments: ' --scan ./', odcInstallation: 'DC'
+                dependencyCheckPublisher pattern: '**/dependency-check-report.xml'
+            }
+        }
+        
+        stage('Sonar') {
+            steps {
+                script {
+                    withSonarQubeEnv('sonar') {
+                        sh "$SCANNER_HOME/bin/sonar-scanner -Dsonar.projectName=Shoppingkart -Dsonar.projectKey=Kart -Dsonar.java.binaries=."
+                    }
+                }
+            }
+        }
+        
+        stage('Maven-step') {
+            steps {
+                script {
+                    withMaven(globalMavenSettingsConfig: 'config', jdk: 'jdk 17', maven: 'maven', mavenSettingsConfig: '', traceability: true) {
+                        
+                    }
+                }
+            }
+        }
+        
+        stage('Build') {
+            steps {
+                script {
+                    withDockerRegistry(credentialsId: 'docker-cred', toolName: 'docker') {
+                        sh 'docker build -t charansait372/shop:latest -f docker/Dockerfile .'
+                    }
+                }
+            }
+        }
+        
+        stage('trivy') {
+            steps {
+                sh  'trivy image -f table -o report.html charansait372/shop:latest'
+            }
+        }
+        
+        stage('Push') {
+            steps {
+                script {
+                    withDockerRegistry(credentialsId: 'docker-cred', toolName: 'docker') {
+                        sh 'docker push charansait372/shop:latest'
+                    }
+                }
+            }
+        }
+    }
+}

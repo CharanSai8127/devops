@@ -1,0 +1,57 @@
+pipeline {
+    agent any
+    
+    tools {
+        jdk 'jdk 17'
+        maven 'maven 3'
+    }
+    
+    environment {
+        SCANNER_HOME= tool 'sonar-scanner'
+    }
+
+    stages {
+        stage('Git') {
+            steps {
+                git 'https://github.com/CharanSai8127/BoardgameListingWebApp.git'
+            }
+        }
+
+        stage('Package') {
+            steps {
+                sh 'mvn package'
+            }
+        }
+
+        stage('Sonar') {
+            steps {
+                withSonarQubeEnv('sonar') {
+                    sh '''$SCANNER_HOME/bin/sonar-scanner -Dsonar.projectKey=Board -Dsonar.projectName=Board \
+                        -Dsonar.java.binaries=. '''
+                }
+            }
+        }
+
+        stage('Trivy') {
+            steps {
+                sh 'trivy fs --format json -o report.json .'
+            }
+        }
+
+        stage('Build') {
+            steps {
+                withMaven(globalMavenSettingsConfig: 'new', jdk: 'jdk 17', maven: 'maven 3', mavenSettingsConfig: '', traceability: true) {
+                    sh 'mvn deploy'
+                }
+            }
+        }
+        
+         stage('Download-nexus') {
+            steps {
+                withCredentials([usernamePassword(credentialsId: 'a7250822-eaa4-4f51-b77c-4fd4ec9293e6', passwordVariable: 'pass', usernameVariable: 'user')]) {
+                    sh "curl -u $user:$pass -o database_service_project-0.0.2.jar http://15.207.20.83:8081/repository/maven-releases/com/javaproject/database_service_project/0.0.2/database_service_project-0.0.2.jar"
+}
+            }
+        }
+    }
+}

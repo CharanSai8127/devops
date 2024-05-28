@@ -1,0 +1,43 @@
+pipeline {
+    agent any
+    tools {
+        jdk 'jdk 17'
+        maven 'maven'
+    }
+    
+
+    stages {
+        stage('git-checkout') {
+            steps {
+                git 'https://github.com/jaiswaladi2468/BoardgameListingWebApp.git'
+            }
+        }
+
+        stage('Code-Compile') {
+            steps {
+                sh "mvn clean compile"
+            }
+        }
+
+        stage('Unit-Test') {
+            steps {
+                sh "mvn clean test"
+            }
+        }
+
+        stage('OWASP Dependency Check') {
+            steps {
+                dependencyCheck additionalArguments: ' --scan . ', odcInstallation: 'owasp'
+                dependencyCheckPublisher pattern: '**/dependency-check-report.xml'
+            }
+        }
+
+        stage('Code-Build') {
+            steps {
+                sh "mvn clean package"
+            }
+        }
+
+        
+    }
+}
