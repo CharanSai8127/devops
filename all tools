@@ -1,0 +1,104 @@
+pipeline {
+    agent any
+    
+    tools {
+        jdk 'jdk 17'
+        maven 'maven 3'
+    }
+    
+    environment {
+        SCANNER_HOME= tool 'sonar-scanner'
+    }
+
+    stages {
+        stage('Git-checkout') {
+            steps {
+                git credentialsId: 'token-git', url: 'https://github.com/CharanSai8127/BoardGamenew.git'
+            }
+        }
+        
+        stage('Compile') {
+            steps {
+                sh 'mvn compile'
+            }
+        }
+        
+        stage('Test') {
+            steps {
+                sh 'mvn test'
+            }
+        }
+        
+        stage('File system scan') {
+            steps {
+                sh 'trivy fs --format table -o trivyreport.html .'
+            }
+        }
+        
+        stage('Sonar') {
+            steps {
+                withSonarQubeEnv('sonar') {
+                   sh ''' $SCANNER_HOME/bin/sonar-scanner -Dsonar.projectName=Boardgame _dsonar.projectKey=Board \
+                       -Dsonar.java.binaries= . '''
+                   }
+            }
+        }
+        
+        stage('Quality-Gate') {
+            steps {
+                script {
+                    waitForQualityGate abortPipeline: false, credentialsId: 'sonar-token'
+                }
+            }
+        }
+        
+         stage('Build') {
+            steps {
+                sh 'mvn package'
+            }
+        }
+        
+         stage('Publish') {
+            steps {
+                withMaven(globalMavenSettingsConfig: 'maven', jdk: 'jdk 17', maven: 'maven 3', mavenSettingsConfig: '', traceability: true) {
+                   sh 'mvn deploy'
+                    }
+            }
+        }
+        
+         stage('Docker') {
+            steps {
+                script {
+                    withDockerRegistry(credentialsId: 'docker-cred', toolName: 'docker') {
+                        sh 'docker build -t Charansait372/Board:latest .'
+                     }
+                }
+            }
+        stage('File system scan') {
+            steps {
+                sh 'trivy fs --format table -o trivyreport.html Charansait372/Board:latest .'
+            }
+        }
+        
+        stage('push') {
+            steps {
+                script {
+                    withDockerRegistry(credentialsId: 'docker-cred', toolName: 'docker') {
+                        sh 'docker build -t Charansait372/Board:latest .'
+                     }
+                }
+            }
+        }
+        
+        stage('Deploy ') {
+            steps {
+                withKubeConfig(caCertificate: '', clusterName: '', contextName: '', credentialsId: '', namespace: 'webapps', restrictKubeConfigAccess: false, serverUrl: 'https://172.31.42.216:6443') {
+    
+}
+            }
+        }
+        
+        
+        }
+    }
+}

@@ -1,0 +1,42 @@
+pipeline {
+    agent any
+    
+    tools {
+        jdk 'jdk 17'
+        maven 'maven3'
+        
+    }
+
+    stages {
+        stage('Git') {
+            steps {
+                git 'https://github.com/jaiswaladi2468/secretsanta-generator.git'
+            }
+        }
+        
+        stage('Package') {
+            steps {
+                sh 'mvn package'
+            }
+        }
+        
+        stage('Docker') {
+            steps {
+                script{
+                    withDockerRegistry(credentialsId: 'a22ab749-4c06-46cc-a59e-4b235105d2ed', toolName: 'docker') {
+                       sh 'docker build -t charansait372/secret-santa-version:v5 . '
+                       sh 'docker push charansait372/secret-santa-version:v5'
+                       sh 'docker run -d -p 8091:8080 charansait372/secret-santa-version:v5'
+}
+                }
+            }
+        }
+        
+         stage('Trivy') {
+            steps {
+                sh 'trivy image --format table -o report.txt charansait372/secret-santa-version:v5'
+            }
+        }
+    }
+    
+}
