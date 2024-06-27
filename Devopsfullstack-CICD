@@ -9,9 +9,9 @@ pipeline {
     environment {
         SCANNER_HOME = tool 'sonar-scanner'
     }
-    
+
     stages {
-        stage('Git') {
+        stage('Git-checkout') {
             steps {
                 git 'https://github.com/CharanSai8127/BoardgameListingWebApp.git'
             }
@@ -35,69 +35,69 @@ pipeline {
             }
         }
         
-        stage('Owasp-dependency-check') {
+        stage('Dependency Check') {
             steps {
                 dependencyCheck additionalArguments: '--scan ./', odcInstallation: 'DC'
-                dependencyCheckPublisher pattern: '**/dependency-check-results.xml'
+                dependencyCheckPublisher pattern: '**/dependency-check-report.xml'
             }
         }
         
         stage('Sonar-analysis') {
             steps {
                 withSonarQubeEnv('sonar') {
-                    sh """$SCANNER_HOME/bin/sonar-scanner -Dsonar.projectName=Boardgame -Dsonar.projectKey=Board \
-                    -Dsonar.java.binaries=. """
+                    sh '''
+                    $SCANNER_HOME/bin/sonar-scanner \
+                    -Dsonar.projectName=Boardgame \
+                    -Dsonar.projectKey=Board \
+                    -Dsonar.java.binaries=.
+                    '''
                 }
             }
         }
         
-        stage('Quality-gate-check') {
+        stage('Quality-gate') {
             steps {
                 waitForQualityGate abortPipeline: false
             }
         }
         
-        stage('Deploy to Nexus') {
+        stage('Deploy to nexus') {
             steps {
-               withMaven(globalMavenSettingsConfig: '', jdk: 'jdk 17', maven: 'maven', mavenSettingsConfig: '', traceability: true) {
-                  sh 'mvn deploy'
+                withMaven(globalMavenSettingsConfig: 'global-maven-settings', jdk: 'jdk 17', maven: 'maven', mavenSettingsConfig: '', traceability: false) {
+                   sh 'mvn deploy'
+               }
+            }
+        }
+        
+        stage('Docker-Build') {
+            steps {
+                script {
+                    withDockerRegistry(credentialsId: 'docker-cred', toolName: 'docker') {
+                       sh 'docker build -t game .'
+                       sh 'docker tag board:latest charansait372/game'
+                    }
                 }
             }
         }
         
-        stage('Docker') {
+        
+        
+        stage('Docker-Push') {
             steps {
                 script {
                     withDockerRegistry(credentialsId: 'docker-cred', toolName: 'docker') {
-                        sh 'docker build -t boardgame:latest .'
-                        sh 'docker tag boardgame:latest charansait372/boardgame:latest'
-                    }   
+                        sh 'docker push charansait372/game'
+                    }
                 }
             }
         }
         
-        stage('Trivy-image') {
-            steps {
-                sh 'trivy image charansait372/boardgame:latest'
-            }
-        }
-        
-        stage('Push the Docker image') {
+        stage('Deploy-to-container') {
             steps {
                 script {
                     withDockerRegistry(credentialsId: 'docker-cred', toolName: 'docker') {
-                        sh 'docker push charansait372/boardgame:latest'
-                    }   
-                }
-            }
-        }
-        
-        stage('Deploy the application to Docker Container') {
-            steps {
-                script {
-                    withDockerRegistry(credentialsId: 'docker-cred', toolName: 'docker') {
-                        sh 'docker run -d --name full-stack -p 8085:8080 charansait372/boardgame:latest'
-                    }   
+                        sh 'docker run -d --name board -p 8082:8080 charansait372/game'
+                    }
                 }
             }
         }
