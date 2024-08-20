@@ -1,0 +1,122 @@
+pipeline {
+    agent any
+    
+    tools {
+        jdk 'jdk 17'
+        maven 'maven 3'
+    }
+    
+    environment {
+        SONARQUBE_HOME = tool 'sonar-scanner'
+    }
+
+    stages {
+        stage('Git-Checkout') {
+            steps {
+                git 'https://github.com/CharanSai8127/BoardgameListingWebApp.git'
+            }
+        }
+        
+        stage('Compile') {
+            steps {
+                sh 'mvn compile'
+            }
+        }
+        
+        stage('Unit-testcases') {
+            steps {
+                sh 'mvn test'
+            }
+        }
+        
+        stage('Package') {
+            steps {
+                sh 'mvn package'
+            }
+        }
+        
+        stage('Owasp-DC') {
+            steps {
+                dependencyCheck additionalArguments: '--scan ./', odcInstallation: 'DC'
+                dependencyCheckPublisher pattern: '**/dependency-check-report.xml'
+            }
+        }
+        
+        // Commented out the SonarQube Analysis Step
+        /*
+        stage('Sonar') {
+            steps {
+                withSonarQubeEnv('sonar') {
+                    sh '''$SONARQUBE_HOME/bin/sonar-scanner \
+                            -Dsonar.projectName=Board \
+                            -Dsonar.projectKey=Board \
+                            -Dsonar.java.binaries=.'''
+                }
+            }
+        }
+        
+        stage('Quality-gate') {
+            steps {
+                waitForQualityGate abortPipeline: false
+            }
+        }
+        */
+        
+        // Commented out the first Deploy-to-Nexus stage
+        /*
+        stage('Deploy-to-nexus') {
+            steps {
+                withMaven(globalMavenSettingsConfig: 'global-maven-settings', jdk: 'jdk 17', maven: 'maven 3', mavenSettingsConfig: '', traceability: false) {
+                    nexusArtifactUploader artifacts: [[artifactId: 'database_service_project', classifier: '', file: 'target/database_service_project-0.0.3.jar', type: 'jar']], 
+                    credentialsId: 'nexus-cred', groupId: 'com.javaproject', nexusUrl: '13.233.230.234:8081', nexusVersion: 'nexus3', protocol: 'http', repository: 'maven-releases', version: '0.0.1'
+                }
+            }
+        }
+        */
+            
+        stage('Deploy-to-nexus') {
+            steps {
+                withMaven(globalMavenSettingsConfig: 'global-maven-settings', jdk: 'jdk 17', maven: 'maven 3', mavenSettingsConfig: '', traceability: false) {
+                    sh 'mvn deploy'
+                }
+            }
+        }
+        
+         stage('Docker') {
+            steps {
+                script {
+                    withDockerRegistry(credentialsId: 'docker-cred', toolName: 'docker') {
+                        sh 'docker build -t board-webapp:v72 . '
+                        sh 'docker tag board-webapp:v72 charansait372/board-webapp:v72'
+                    }
+                }
+            }
+        }
+        
+         stage('Trivy-image') {
+            steps {
+                sh 'trivy image charansait372/board-webapp:v72'
+            }
+        }
+        
+         stage('Docker-Push') {
+            steps {
+                script {
+                    withDockerRegistry(credentialsId: 'docker-cred', toolName: 'docker') {
+                        sh 'docker push charansait372/board-webapp:v72'
+                    }
+                }
+            }
+        }
+        
+         stage('Docker-Run') {
+            steps {
+                script {
+                    withDockerRegistry(credentialsId: 'docker-cred', toolName: 'docker') {
+                        sh 'docker run -d --name board -p 8085:8080 charansait372/board-webapp:v72'
+                    }
+                }
+            }
+        }
+    }
+}
