@@ -1,0 +1,157 @@
+pipeline {
+    agent any
+
+    stages {
+        stage('Git-Checkout') {
+            steps {
+                git 'https://github.com/CharanSai8127/10-MicroService-Appliction.git'
+            }
+        }
+        
+        stage('Ad-service') {
+            steps {
+                script {
+                    withDockerRegistry(credentialsId: 'docker-cred', toolName: 'docker') {
+                        dir('src/adservice') {
+                            sh 'docker build -t charansait372/adservice:v1 .'
+                            sh 'docker push charansait372/adservice:v1'
+                        }
+                    }
+                }
+            }
+        }
+
+        stage('Email') {
+            steps {
+                script {
+                    withDockerRegistry(credentialsId: 'docker-cred', toolName: 'docker') {
+                        dir('src/emailservice') {
+                            sh 'docker build -t charansait372/emailservice:v1 .'
+                            sh 'docker push charansait372/emailservice:v1'
+                        }
+                    }
+                }
+            }
+        }
+
+        stage('Checkout') {
+            steps {
+                script {
+                    withDockerRegistry(credentialsId: 'docker-cred', toolName: 'docker') {
+                        dir('src/checkoutservice') {
+                            sh 'docker build -t charansait372/checkoutservice:v1 .'
+                            sh 'docker push charansait372/checkoutservice:v1'
+                        }
+                    }
+                }
+            }
+        }
+
+        stage('Rec') {
+            steps {
+                script {
+                    withDockerRegistry(credentialsId: 'docker-cred', toolName: 'docker') {
+                        dir('src/recommendationservice') {
+                            sh 'docker build -t charansait372/recommendationservice:v1 .'
+                            sh 'docker push charansait372/recommendationservice:v1'
+                        }
+                    }
+                }
+            }
+        }
+
+        stage('Front') {
+            steps {
+                script {
+                    withDockerRegistry(credentialsId: 'docker-cred', toolName: 'docker') {
+                        dir('src/frontend') {
+                            sh 'docker build -t charansait372/frontend:v1 .'
+                            sh 'docker push charansait372/frontend:v1'
+                        }
+                    }
+                }
+            }
+        }
+
+        stage('Pay') {
+            steps {
+                script {
+                    withDockerRegistry(credentialsId: 'docker-cred', toolName: 'docker') {
+                        dir('src/paymentservice') {
+                            sh 'docker build -t charansait372/paymentservice:v1 .'
+                            sh 'docker push charansait372/paymentservice:v1'
+                        }
+                    }
+                }
+            }
+        }
+
+        /*
+        stage('Cart') {
+            steps {
+                script {
+                    withDockerRegistry(credentialsId: 'docker-cred', toolName: 'docker') {
+                        dir('src/cartservice') {
+                            sh 'docker build -t charansait372/cartservice:v1 .'
+                            sh 'docker push charansait372/cartservice:v1'
+                        }
+                    }
+                }
+            }
+        }
+        */
+
+        stage('Load') {
+            steps {
+                script {
+                    withDockerRegistry(credentialsId: 'docker-cred', toolName: 'docker') {
+                        dir('src/loadgenerator') {
+                            sh 'docker build -t charansait372/loadgenerator:v1 .'
+                            sh 'docker push charansait372/loadgenerator:v1'
+                        }
+                    }
+                }
+            }
+        }
+
+        stage('Currency') {
+            steps {
+                script {
+                    withDockerRegistry(credentialsId: 'docker-cred', toolName: 'docker') {
+                        dir('src/currencyservice') {
+                            sh 'docker build -t charansait372/currencyservice:v1 .'
+                            sh 'docker push charansait372/currencyservice:v1'
+                        }
+                    }
+                }
+            }
+        }
+
+        stage('Shipping') {
+            steps {
+                script {
+                    withDockerRegistry(credentialsId: 'docker-cred', toolName: 'docker') {
+                        dir('src/shippingservice') {
+                            sh 'docker build -t charansait372/shippingservice:v1 .'
+                            sh 'docker push charansait372/shippingservice:v1'
+                        }
+                    }
+                }
+            }
+        }
+
+        stage('Kubernetes') {
+            steps {
+                withKubeConfig(caCertificate: '', clusterName: 'my-eks23', credentialsId: 'k8-secret', namespace: 'webapps', serverUrl: 'https://F7CD0D5C13F7E85FDE5610D2A44461B9.gr7.ap-south-1.eks.amazonaws.com') {
+                    sh 'kubectl apply -f deployment-service.yml'
+                    sh 'kubectl get svc -n webapps'
+                    sh 'kubectl get pods -n webapps'
+                }
+            }
+        }
+    }
+}
+
+        
+       
+   
