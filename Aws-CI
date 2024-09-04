@@ -1,0 +1,28 @@
+version: 0.2
+
+env:
+  parameter-store:
+    DOCKER_REGISTRY_URL: /docker-registry-url/
+    DOCKER_REGISTRY_USERNAME: /docker-user-cred/
+    DOCKER_REGISTRY_PASSWORD: /docker-pass-cred/
+
+
+phases:
+  install:
+    runtime-versions:
+      python: 3.11
+  pre_build:
+    commands:
+      - pip install -r day-14/sample-python-app/requirements.txt
+    
+  build:
+    commands:
+      - cd day-14/sample-python-app
+      - echo "building docker image"
+      - docker build -t "$DOCKER_REGISTRY_URL/$DOCKER_REGISTRY_USERNAME/sample_app:latest"
+      - docker push "$DOCKER_REGISTRY_URL/$DOCKER_REGISTRY_USERNAME/sample_app:latest"
+      
+  post_build:
+    commands:
+      - echo "completed the pipeline and now we can invoke Continuous delivery"
+      
