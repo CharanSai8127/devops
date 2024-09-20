@@ -1,0 +1,118 @@
+pipeline {
+    agent any
+    
+    tools {
+        jdk 'jdk 17'
+        maven 'maven'
+    }
+    
+    environment {
+        SONARQUBE_HOME = tool 'sonar-scanner'
+    }
+
+    stages {
+        stage('Git-Checkout') {
+            steps {
+                git 'https://github.com/CharanSai8127/BoardgameListingWebApp.git'
+            }
+        }
+        
+        stage('Compile') {
+            steps {
+                sh 'mvn compile'
+            }
+        }
+        
+        stage('Unit-test') {
+            steps {
+                sh 'mvn test'
+            }
+        }
+        
+        stage('Package') {
+            steps {
+                sh 'mvn clean package'
+            }
+        }
+        
+        stage('Owasp-DC') {
+            steps {
+                dependencyCheck additionalArguments: '--scan ./', odcInstallation: 'DC'
+                dependencyCheckPublisher pattern: '**/dependency-check-report.xml'
+            }
+        }
+        
+        // Commenting out the SonarQube analysis stage
+        /*
+        stage('SonarQube-analysis') {
+            steps {
+                withSonarQubeEnv('sonar') { // Use the correct SonarQube server name
+                    sh '''
+                        $SONARQUBE_HOME/bin/sonar-scanner \
+                        -Dsonar.projectName=Boardgame \
+                        -Dsonar.projectKey=Boardgame \
+                        -Dsonar.java.binaries=.
+                    '''
+                }
+            }
+        }
+        */
+        
+        // Commenting out the Quality Gate stage
+        /*
+        stage('Quality-gate') {
+            steps {
+                waitForQualityGate abortPipeline: false
+            }
+        }
+        */
+        
+        stage('Nexus') {
+            steps {
+                withMaven(globalMavenSettingsConfig: 'global-maven-settings', jdk: 'jdk 17', maven: 'maven', mavenSettingsConfig: '', traceability: false) {
+                    nexusArtifactUploader artifacts: [[artifactId: 'database_service_project', classifier: '', file: '/var/lib/jenkins/workspace/new-CICD/target/database_service_project-0.0.3.jar', type: 'jar']], credentialsId: 'nexus-cred', groupId: 'com.javaproject', nexusUrl: '13.234.78.64:8081/', nexusVersion: 'nexus3', protocol: 'http', repository: 'maven-releases', version: '0.0.1'
+                }
+             }
+        }
+        
+        stage('Docker') {
+            steps {
+                script {
+                    withDockerRegistry(credentialsId: 'docker-cred', toolName: 'docker') {
+                        sh 'docker build -t charansait372/board:v14 .'
+                    }
+                }
+            }
+        }
+        
+        
+        stage('Trivy') {
+            steps {
+                sh 'trivy image charansait372/board:v14 '
+            }
+        }
+        
+    
+        
+        stage('Deploy to Dockerhub') {
+            steps {
+                script {
+                    withDockerRegistry(credentialsId: 'docker-cred', toolName: 'docker') {
+                        sh 'docker push charansait372/board:v14'
+                    }
+                }
+            }
+        }
+        
+        
+        stage('Docker run') {
+            steps {
+                script {
+                    withDockerRegistry(credentialsId: 'docker-cred', toolName: 'docker') {
+                        sh 'docker run -d --name new-board -p 8082:8080 charansait372/board:v14'
+                    }
+                }
+            }
+        }
+    }
+}
