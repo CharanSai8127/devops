@@ -1,0 +1,133 @@
+pipeline {
+    agent any
+
+    tools {
+        maven 'maven 3'
+    }
+
+    environment {
+        SCANNER_HOME = tool 'sonar-scanner'
+        DOCKER_IMAGE = "charansait372/devops-blog:latest"
+        ARGOCD_API_URL = "ac838631a353c46e19b67eb98a955153-2049727066.ap-south-1.elb.amazonaws.com:443" // No https://
+        ARGOCD_TOKEN = credentials('argocd-token')
+    }
+
+    stages {
+        stage('Git-checkout') {
+            steps {
+                git branch: 'main', credentialsId: 'git-cred', url: 'https://github.com/CharanSai8127/Fullstack-blogging.git'
+            }
+        }
+
+        stage('Compile') {
+            steps {
+                sh 'mvn compile'
+            }
+        }
+
+        stage('Tests') {
+            steps {
+                sh 'mvn test'
+            }
+        }
+
+        stage('Trivy-fs-scan') {
+            steps {
+                sh 'trivy fs --format table -o trivy-scan-results.txt .'
+            }
+        }
+
+        stage('Sonarqube') {
+            steps {
+                withSonarQubeEnv('sonar-server') {
+                    sh """
+                    ${SCANNER_HOME}/bin/sonar-scanner \
+                    -Dsonar.projectName=Blogging-app \
+                    -Dsonar.projectKey=app-Blogging \
+                    -Dsonar.java.binaries=target
+                    """
+                }
+            }
+        }
+
+        stage('Build') {
+            steps {
+                sh 'mvn package'
+            }
+        }
+
+        stage('Publish-artifacts') {
+            steps {
+                withMaven(globalMavenSettingsConfig: 'maven-settings', maven: 'maven 3', traceability: true) {
+                    sh 'mvn deploy'
+                }
+            }
+        }
+
+        stage('Docker-Build&Tag') {
+            steps {
+                script {
+                    withDockerRegistry(credentialsId: 'docker-cred', toolName: 'docker') {
+                        sh 'docker build -t ${DOCKER_IMAGE} .'
+                    }
+                }
+            }
+        }
+
+        stage("Docker-Image-scan") {
+            steps {
+                sh 'trivy image --format table -o image.txt ${DOCKER_IMAGE}'
+            }
+        }
+
+        stage('Docker-push') {
+            steps {
+                script {
+                    withDockerRegistry(credentialsId: 'docker-cred', toolName: 'docker') {
+                        sh 'docker push ${DOCKER_IMAGE}'
+                    }
+                }
+            }
+        }
+
+        stage('Update Kubernetes Manifests') {
+            steps {
+                script {
+                    // Debug the Docker image and the folder content
+                    echo "Docker image: ${DOCKER_IMAGE}"
+                    sh 'ls -l deployment/'  // Check the files in the deployment folder
+
+                    // Loop through all YAML files and update the image tag
+                    sh '''
+                        set -e
+                        for file in deployment/*.yml; do
+                            echo "Updating $file"
+                            sed -i 's|replaceImageTag|'"${DOCKER_IMAGE}"'|g' $file
+                        done
+                    '''
+                }
+            }
+        }
+
+        stage('Login to Argo CD') {
+            steps {
+                script {
+                    withCredentials([string(credentialsId: 'argocd-token', variable: 'ARGOCD_TOKEN')]) {
+                        sh '''
+                            argocd login ${ARGOCD_API_URL} --username admin --password $ARGOCD_TOKEN --insecure
+                        '''
+                    }
+                }
+            }
+        }
+
+        stage('Sync Application in Argo CD') {
+            steps {
+                script {
+                    // Trigger sync in Argo CD to apply the updated deployment manifest
+                    sh "argocd app sync devops-blog"  // Replace with actual app name in Argo CD if needed
+                }
+            }
+        }
+    }
+}
